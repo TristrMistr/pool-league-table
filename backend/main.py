@@ -122,7 +122,9 @@ async def add_tournament(tournament: Tournament, db: Session = Depends(get_db)):
 
 @app.post("/result")
 async def add_tournament(match: Match, db: Session = Depends(get_db)):
+
     # Look up tournament and extract format
+    print(f'Extracting {match.tournament_name} format info')
     tournament = db.query(models.Tournament).filter(models.Tournament.name == match.tournament_name).all()
     format = tournament[0].type
     if format == TournamentType.BEST_OF:
@@ -135,7 +137,8 @@ async def add_tournament(match: Match, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail=("The amount of frames doesn't equal the total frames for each match"))
     else:
         pass
-
+    
+    print("Updating row in match table")
     # Update match table
     db.query(models.Matches).\
        filter(models.Matches.tournament_name == match.tournament_name,
@@ -144,9 +147,6 @@ async def add_tournament(match: Match, db: Session = Depends(get_db)):
        update({'player1_score': match.player1_score,
                'player2_score': match.player2_score})
     db.commit()
+    
+    return {"message": "Updated result successfully"}
 
-    match_to_return = db.query(models.Matches).filter(models.Matches.tournament_name == match.tournament_name,
-                                                      models.Matches.player1.in_([match.player1, match.player2]),
-                                                      models.Matches.player2.in_([match.player1, match.player2])).all()
-    return match_to_return
-    # Update result table
