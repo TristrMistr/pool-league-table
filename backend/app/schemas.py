@@ -52,3 +52,14 @@ class Match(BaseModel):
     player2: int
     player1_score: Optional[int]
     player2_score: Optional[int]
+
+
+class Result(BaseModel):
+    player_name: str
+    played: int = 0
+    won: int = 0
+    lost: int = 0
+    drawn: int = 0
+    frames_for: int = 0
+    frames_against: int = 0
+    points: int = 0

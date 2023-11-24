@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException
+from typing import Dict
 from sqlalchemy.orm import Session
 import app.models as models
 from app.database import engine, get_db
-from app.schemas import Person, Tournament, Match
+from app.schemas import Person, Tournament, Match, Result
 from app.utils.people_utils import check_everyone_exists, create_player_lookup
+from app.utils.data_merging_utils import update_results
 from app.enums import TournamentType
 
 app = FastAPI()
@@ -99,30 +101,14 @@ async def add_tournament(tournament: Tournament, db: Session = Depends(get_db)):
             db.commit()
             db.refresh(match)
 
-    # Add results to the results table
-    results = db.query(models.Results).all()
-    results_id = len(results) + 1
-    for i in range(len(tournament_people)):
-        results = models.Results(id=results_id,
-                                 tournament_name=tournament.name,
-                                 player_id=name_to_id[tournament_people[i]],
-                                 played=0,
-                                 won=0,
-                                 lost=0,
-                                 drawn=0,
-                                 frames_for=0,
-                                 frames_against=0)
-        results_id += 1
-        db.add(results)
-        db.commit()
-        db.refresh(results)
-
     return new_tourney
 
 
 @app.post("/result")
 async def add_tournament(match: Match, db: Session = Depends(get_db)):
+
     # Look up tournament and extract format
+    print(f'Extracting {match.tournament_name} format info')
     tournament = db.query(models.Tournament).filter(models.Tournament.name == match.tournament_name).all()
     format = tournament[0].type
     if format == TournamentType.BEST_OF:
@@ -135,7 +121,8 @@ async def add_tournament(match: Match, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail=("The amount of frames doesn't equal the total frames for each match"))
     else:
         pass
-
+    
+    print("Updating row in match table")
     # Update match table
     db.query(models.Matches).\
        filter(models.Matches.tournament_name == match.tournament_name,
@@ -144,9 +131,32 @@ async def add_tournament(match: Match, db: Session = Depends(get_db)):
        update({'player1_score': match.player1_score,
                'player2_score': match.player2_score})
     db.commit()
+    
+    return {"message": "Updated result successfully"}
 
-    match_to_return = db.query(models.Matches).filter(models.Matches.tournament_name == match.tournament_name,
-                                                      models.Matches.player1.in_([match.player1, match.player2]),
-                                                      models.Matches.player2.in_([match.player1, match.player2])).all()
-    return match_to_return
-    # Update result table
+@app.get("/results/{tournament_name}")
+async def add_tournament(tournament_name: str, scoring_system: str = "Default", db: Session = Depends(get_db)):
+    print("I HAVE GOT HERE IN RESULTS")
+    matches = db.query(models.Matches).filter(models.Matches.tournament_name == tournament_name).all()
+    people = db.query(models.Person).all()
+    results: Dict(Result) = {}
+    players_found = []
+    _, id_to_name = create_player_lookup(people)
+    for match in matches:
+        # Check if player 1 and 2 already exist
+        print(id_to_name[match.player1])
+        if match.player1 not in players_found:
+            players_found.append(match.player1)
+            results[match.player1] = Result(player_name=id_to_name[match.player1])
+        if match.player2 not in players_found:
+            players_found.append(match.player2)
+            results[match.player2] = Result(player_name=id_to_name[match.player2]) 
+        
+        print(results)
+        # Calculate the result delta for each player in the match
+        player1, player2 = update_results(match, results[match.player1], results[match.player2])
+        results[match.player1] = player1
+        results[match.player2] = player2
+    
+    result_list = list(results.values())
+    return result_list
