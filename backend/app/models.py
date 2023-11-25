@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Column, Enum
+from sqlalchemy import String, Integer, Column, Enum, Boolean
 from .database import Base
 from .enums import TournamentType
 
@@ -43,3 +43,13 @@ class Results(Base):
     drawn = Column(Integer, nullable=False, default=0)
     frames_for = Column(Integer, nullable=False, default=0)
     frames_against = Column(Integer, nullable=False, default=0)
+
+
+class ScoringSystem(Base):
+    __tablename__ = "scoring_system"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    name = Column(String, nullable=False)
+    frame_points = Column(Integer, primary_key=True, nullable=False)
+    win_points = Column(Integer, primary_key=True, nullable=False)
+    default = Column(Boolean, nullable=False)

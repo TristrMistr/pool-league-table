@@ -63,3 +63,11 @@ class Result(BaseModel):
     frames_for: int = 0
     frames_against: int = 0
     points: int = 0
+
+
+class ScoringSystem(BaseModel):
+    id: Optional[int]
+    name: str
+    frame_points: int
+    win_points: int
+    default: Optional[bool] = False
