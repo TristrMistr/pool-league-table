@@ -3,7 +3,7 @@ from typing import Dict
 from sqlalchemy.orm import Session
 import app.models as models
 from app.database import engine, get_db
-from app.schemas import Person, Tournament, Match, Result
+from app.schemas import Person, Tournament, Match, Result, ScoringSystem
 from app.utils.people_utils import check_everyone_exists, create_player_lookup
 from app.utils.data_merging_utils import update_results
 from app.enums import TournamentType
@@ -135,16 +135,18 @@ async def add_tournament(match: Match, db: Session = Depends(get_db)):
     return {"message": "Updated result successfully"}
 
 @app.get("/results/{tournament_name}")
-async def add_tournament(tournament_name: str, scoring_system: str = "Default", db: Session = Depends(get_db)):
-    print("I HAVE GOT HERE IN RESULTS")
+async def add_tournament(tournament_name: str, scoring_system: str = "point for a win", db: Session = Depends(get_db)):
     matches = db.query(models.Matches).filter(models.Matches.tournament_name == tournament_name).all()
     people = db.query(models.Person).all()
     results: Dict(Result) = {}
     players_found = []
+    scoring_system_to_use = db.query(models.ScoringSystem).filter(models.ScoringSystem.name == scoring_system).first()
+    if scoring_system_to_use is None:
+        raise HTTPException(status_code=404,
+                                detail=f'{scoring_system} does not exist')
     _, id_to_name = create_player_lookup(people)
     for match in matches:
         # Check if player 1 and 2 already exist
-        print(id_to_name[match.player1])
         if match.player1 not in players_found:
             players_found.append(match.player1)
             results[match.player1] = Result(player_name=id_to_name[match.player1])
@@ -152,11 +154,33 @@ async def add_tournament(tournament_name: str, scoring_system: str = "Default", 
             players_found.append(match.player2)
             results[match.player2] = Result(player_name=id_to_name[match.player2]) 
         
-        print(results)
         # Calculate the result delta for each player in the match
-        player1, player2 = update_results(match, results[match.player1], results[match.player2])
+        player1, player2 = update_results(match, results[match.player1], results[match.player2], scoring_system_to_use)
         results[match.player1] = player1
         results[match.player2] = player2
     
     result_list = list(results.values())
     return result_list
+
+@app.post("/scoring-system")
+async def add_scoring_system(scoring_system: ScoringSystem,  db: Session = Depends(get_db)):
+    scoring_systems = db.query(models.ScoringSystem).all()
+    scoring_system.id = len(scoring_systems)+1
+    scoring_system.name = scoring_system.name.lower()
+    for system in scoring_systems:
+        if scoring_system.name == system.name:
+            raise HTTPException(status_code=409,
+                                detail=f'{scoring_system.name} already exists')
+
+    new_system = models.ScoringSystem(**scoring_system.__dict__)
+    db.add(new_system)
+    db.commit()
+    db.refresh(new_system)
+    return new_system
+
+@app.get("/scoring-systems")
+async def add_scoring_system(db: Session = Depends(get_db)):
+    """Get a list of soring system names"""
+    systems = db.query(models.ScoringSystem).all()
+    system_names = [x.name for x in systems]
+    return system_names
